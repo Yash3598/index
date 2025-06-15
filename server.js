@@ -6,6 +6,9 @@ const { chromium } = require('playwright');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(cors({
+  origin: '*'
+}));
 
 app.post('/analyze', async (req, res) => {
   const baseUrl = req.body.url;
