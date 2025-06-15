@@ -1,14 +1,12 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
 const { chromium } = require('playwright');
 
 const app = express();
-app.use(cors());
+
+// Enable CORS for all origins
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use(cors({
-  origin: '*'
-}));
 
 app.post('/analyze', async (req, res) => {
   const baseUrl = req.body.url;
@@ -20,15 +18,16 @@ app.post('/analyze', async (req, res) => {
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    locale: 'en-US'
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    locale: 'en-US',
   });
 
   const page = await context.newPage();
 
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', {
-      get: () => false
+      get: () => false,
     });
   });
 
@@ -95,7 +94,9 @@ app.post('/analyze', async (req, res) => {
         if (match) result.clarity = match[1];
       }
       if (!result.fbPixel && script.innerText.includes("fbq('init'")) {
-        const match = script.innerText.match(/fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/);
+        const match = script.innerText.match(
+          /fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/
+        );
         if (match) result.fbPixel = match[1];
       }
     }
@@ -118,7 +119,7 @@ app.post('/analyze', async (req, res) => {
     collectLinks(document.querySelector('footer'));
     document.querySelectorAll('[class*="footer"]').forEach(collectLinks);
     collectLinks(document.querySelector('.footer-links'));
-    return Array.from(anchors).map(str => JSON.parse(str));
+    return Array.from(anchors).map((str) => JSON.parse(str));
   });
 
   const trfUrl = await page.evaluate(() => {
@@ -134,11 +135,13 @@ app.post('/analyze', async (req, res) => {
 
     const debugInfo = await page.evaluate(() => {
       const text = document.body.innerText;
-      const portfolioMatch = text.match(/portfolio[_\s\-]?id[:=]?\s*([a-zA-Z0-9\-]+)/i);
+      const portfolioMatch = text.match(
+        /portfolio[_\s\-]?id[:=]?\s*([a-zA-Z0-9\-]+)/i
+      );
       const sourctagMatch = text.match(/src=([a-zA-Z0-9\-_]+)/i);
       return {
         portfolioId: portfolioMatch ? portfolioMatch[1] : null,
-        sourctag: sourctagMatch ? sourctagMatch[1] : null
+        sourctag: sourctagMatch ? sourctagMatch[1] : null,
       };
     });
 
@@ -156,7 +159,7 @@ app.post('/analyze', async (req, res) => {
     footerLinks,
     trfUrl,
     portfolioId,
-    sourctag
+    sourctag,
   });
 });
 
