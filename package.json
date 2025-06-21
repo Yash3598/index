@@ -1,13 +1,17 @@
 {
-  "name": "web-analyzer",
+  "name": "trf-link-analyzer",
   "version": "1.0.0",
+  "description": "Extracts up to 2 'trf' links from a webpage",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "playwright": "^1.52.0"
+    "express": "^4.18.2",
+    "playwright": "^1.44.0"
+  },
+  "engines": {
+    "node": ">=16"
   }
 }
