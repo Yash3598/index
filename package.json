@@ -4,7 +4,8 @@
   "description": "Extracts up to 2 'trf' links from a webpage",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx playwright install --with-deps"
   },
   "dependencies": {
     "cors": "^2.8.5",
