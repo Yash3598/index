@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "Extracts up to 2 'trf' links from a webpage",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "postinstall": "npx playwright install --with-deps"
-  },
+"scripts": {
+  "start": "node server.js",
+  "postinstall": "npx playwright install chromium"
+}
+,
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
