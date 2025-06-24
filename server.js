@@ -1,19 +1,13 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());          // optional, but handy
-app.use(express.json());  // optional, in case you add POST routes later
+app.use(cors());
+app.use(express.json());
 
-// GET /
-app.get('/', (req, res) => {
-  res.send('Hello World');
-});
-
-// (Optional) POST /hello → JSON response
+// Always returns "Hello World" for POST /hello
 app.post('/hello', (req, res) => {
   res.json({ message: 'Hello World' });
 });
