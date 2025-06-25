@@ -12,9 +12,6 @@ app.post('/hello', async (req, res) => {
   const inputUrl = req.body.url;
   if (!inputUrl) return res.status(400).json({ error: 'Missing URL in request body' });
 
-  const baseUrl = inputUrl;
-  const testUrl = baseUrl + '&test';
-
   const browser = await chromium.launch({
     headless: true,
     args: ['--disable-blink-features=AutomationControlled']
@@ -27,71 +24,13 @@ app.post('/hello', async (req, res) => {
 
   const page = await context.newPage();
 
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', {
-      get: () => false
-    });
+  await page.goto(inputUrl, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(3000);
+
+  const trfLink = await page.evaluate(() => {
+    const a = document.querySelector('a[href*="trf"]');
+    return a ? a.href : null;
   });
-
-  let clarityId = null;
-
-  function findClarityId(obj) {
-    if (!obj || typeof obj !== 'object') return null;
-    if (obj.ms_clarityid) return obj.ms_clarityid;
-    for (const key in obj) {
-      if (typeof obj[key] === 'object') {
-        const found = findClarityId(obj[key]);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
-  page.on('requestfinished', async (request) => {
-    const reqUrl = request.url();
-
-    if (!clarityId) {
-      const match = reqUrl.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
-      if (match) clarityId = match[1];
-    }
-
-    if (!clarityId) {
-      try {
-        const postData = request.postData();
-        if (postData) {
-          let json;
-          try {
-            json = JSON.parse(postData);
-          } catch {}
-          if (json) {
-            const found = findClarityId(json);
-            if (found) clarityId = found;
-          }
-        }
-      } catch {}
-    }
-  });
-
-  try {
-    await page.goto(baseUrl, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForTimeout(3000);
-    await page.reload({ waitUntil: 'load', timeout: 60000 });
-    await page.waitForTimeout(3000);
-  } catch {}
-
-  const fallback = await page.evaluate(() => {
-    const result = { clarity: null };
-    const scripts = Array.from(document.querySelectorAll('script'));
-    for (const script of scripts) {
-      if (!result.clarity && script.src?.includes('clarity.ms/tag/')) {
-        const match = script.src.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
-        if (match) result.clarity = match[1];
-      }
-    }
-    return result;
-  });
-
-  clarityId = clarityId || fallback.clarity;
 
   const footerLinks = await page.evaluate(() => {
     const anchors = new Set();
@@ -111,42 +50,10 @@ app.post('/hello', async (req, res) => {
     return Array.from(anchors).map(str => JSON.parse(str));
   });
 
-  const trfLinks = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('a[href*="trf"]'))
-      .slice(0, 2)
-      .map(a => a.href);
-  });
-
-  // Test mode
-  let portfolioId = null;
-  let sourctag = null;
-
-  try {
-    await page.goto(testUrl, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForTimeout(3000);
-
-    const debugInfo = await page.evaluate(() => {
-      const text = document.body.innerText;
-      const portfolioMatch = text.match(/portfolio[_\s\-]?id[:=]?\s*([a-zA-Z0-9\-]+)/i);
-      const sourctagMatch = text.match(/src=([a-zA-Z0-9\-_]+)/i);
-
-      return {
-        portfolioId: portfolioMatch ? portfolioMatch[1] : null,
-        sourctag: sourctagMatch ? sourctagMatch[1] : null
-      };
-    });
-
-    portfolioId = debugInfo.portfolioId;
-    sourctag = debugInfo.sourctag;
-  } catch {}
-
   await browser.close();
 
   res.json({
-    clarityId,
-    portfolioId,
-    sourctag,
-    trfLinks,
+    trfLink,
     footerLinks
   });
 });
