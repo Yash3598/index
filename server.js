@@ -28,7 +28,7 @@ app.post('/hello', async (req, res) => {
 
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', {
-        get: () => false;
+        get: () => false
       });
     });
 
