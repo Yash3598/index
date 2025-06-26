@@ -20,12 +20,14 @@ app.post('/hello', async (req, res) => {
     });
 
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       locale: 'en-US'
     });
 
     const page = await context.newPage();
 
+    // stealth: remove navigator.webdriver
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', {
         get: () => false
@@ -48,131 +50,117 @@ app.post('/hello', async (req, res) => {
     }
 
     page.on('requestfinished', async (request) => {
-      const reqUrl = request.url();
+      const url = request.url();
 
+      // network-based Clarity ID
       if (!clarityId) {
-        const match = reqUrl.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
-        if (match) clarityId = match[1];
+        const m = url.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
+        if (m) clarityId = m[1];
       }
 
-      if (!fbPixelId && reqUrl.includes('facebook.com/tr')) {
+      // network-based FB Pixel ID
+      if (!fbPixelId && url.includes('facebook.com/tr')) {
         try {
-          const urlObj = new URL(reqUrl);
-          const id = urlObj.searchParams.get('id');
+          const u = new URL(url);
+          const id = u.searchParams.get('id');
           if (id) fbPixelId = id;
         } catch {}
       }
 
+      // POST-body-based Clarity ID
       if (!clarityId) {
         try {
-          const postData = request.postData();
-          if (postData) {
-            let json;
-            try {
-              json = JSON.parse(postData);
-            } catch {}
-            if (json) {
-              const found = findClarityId(json);
-              if (found) clarityId = found;
-            }
+          const data = request.postData();
+          if (data) {
+            const obj = JSON.parse(data);
+            const found = findClarityId(obj);
+            if (found) clarityId = found;
           }
         } catch {}
       }
     });
 
-    // Load main URL
+    // — STEP 1: load main page —
     await page.goto(inputUrl, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(5000);
 
-    // Fallback check for clarity ID and fbPixel ID in script tags
+    // fallback via <script> tags
     const fallback = await page.evaluate(() => {
-      const result = { clarity: null, fbPixel: null };
-      const scripts = Array.from(document.querySelectorAll('script'));
-
-      for (const script of scripts) {
-        if (!result.clarity && script.src?.includes('clarity.ms/tag/')) {
-          const match = script.src.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
-          if (match) result.clarity = match[1];
+      const r = { clarity: null, fbPixel: null };
+      document.querySelectorAll('script').forEach(s => {
+        if (!r.clarity && s.src?.includes('clarity.ms/tag/')) {
+          const m = s.src.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
+          if (m) r.clarity = m[1];
         }
-
-        if (!result.fbPixel && script.innerText.includes("fbq('init'")) {
-          const match = script.innerText.match(/fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/);
-          if (match) result.fbPixel = match[1];
+        if (!r.fbPixel && /fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/.test(s.innerText)) {
+          const m = s.innerText.match(/fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/);
+          if (m) r.fbPixel = m[1];
         }
-      }
-
-      return result;
+      });
+      return r;
     });
-
     if (!clarityId) clarityId = fallback.clarity;
     if (!fbPixelId) fbPixelId = fallback.fbPixel;
 
-    // Footer links
+    // collect footer links
     const footerLinks = await page.evaluate(() => {
-      const anchors = new Set();
-      const collectLinks = (container) => {
+      const set = new Set();
+      const collect = container => {
         if (!container) return;
-        for (const a of container.querySelectorAll('a')) {
-          const href = a.href?.trim();
-          const text = a.textContent?.trim();
-          if (href) anchors.add(JSON.stringify({ text, href }));
-        }
+        container.querySelectorAll('a').forEach(a => {
+          if (a.href) {
+            set.add(JSON.stringify({ text: a.textContent.trim(), href: a.href }));
+          }
+        });
       };
-      collectLinks(document.querySelector('footer'));
-      document.querySelectorAll('[class*="footer"]').forEach(collectLinks);
-      collectLinks(document.querySelector('.footer-links'));
-      return Array.from(anchors).map(str => JSON.parse(str));
+      collect(document.querySelector('footer'));
+      document.querySelectorAll('[class*=footer]').forEach(collect);
+      collect(document.querySelector('.footer-links'));
+      return Array.from(set).map(j => JSON.parse(j));
     });
 
-    // First TRF ad link
+    // first TRF link
     const trfLink = await page.evaluate(() => {
       const a = document.querySelector('a[href*="trf"]');
       return a ? a.href : null;
     });
 
-    // Load &test version to get portfolio ID and sourctag
+    // — STEP 2: load ?test version for portfolio & sourctag —
+    const testUrl = inputUrl.includes('?') ? `${inputUrl}&test` : `${inputUrl}?test`;
     let portfolioId = null;
     let sourctag = null;
-    const testUrl = inputUrl.includes('?') ? inputUrl + '&test' : inputUrl + '?test';
-
     try {
       await page.goto(testUrl, { waitUntil: 'load', timeout: 60000 });
       await page.waitForTimeout(3000);
-
-      const debugInfo = await page.evaluate(() => {
-        const text = document.body.innerText;
-        const portfolioMatch = text.match(/portfolio[_\s\-]?id[:=]?\s*([a-zA-Z0-9\-]+)/i);
-        const sourctagMatch = text.match(/src=([a-zA-Z0-9\-_]+)/i);
-        return {
-          portfolioId: portfolioMatch ? portfolioMatch[1] : null,
-          sourctag: sourctagMatch ? sourctagMatch[1] : null
-        };
+      const info = await page.evaluate(() => {
+        const txt = document.body.innerText;
+        const p = (txt.match(/portfolio[_\s\-]?id[:=]?\s*([A-Za-z0-9\-]+)/i) || [])[1];
+        const s = (txt.match(/src=([A-Za-z0-9\-_]+)/i) || [])[1];
+        return { portfolioId: p || null, sourctag: s || null };
       });
-
-      portfolioId = debugInfo.portfolioId;
-      sourctag = debugInfo.sourctag;
-    } catch (err) {
-      console.warn(`⚠️ Test mode page failed: ${err.message}`);
-    }
+      portfolioId = info.portfolioId;
+      sourctag = info.sourctag;
+    } catch {}
 
     await browser.close();
 
+    // respond — always include every field, defaulting to "Not Found"
     res.json({
       clarityId: clarityId || 'Not Found',
       fbPixelId: fbPixelId || 'Not Found',
       trfLink: trfLink || 'Not Found',
-      footerLinks: footerLinks.length > 0 ? footerLinks : ['Not Found'],
+      footerLinks: footerLinks.length
+        ? footerLinks
+        : [{ text: 'Not Found', href: '' }],
       portfolioId: portfolioId || 'Not Found',
-      sourctag: sourctag || 'Not Found'
+      sourctag: sourctag || 'Not Found',
     });
 
-  } catch (err) {
+  } catch (e) {
     if (browser) await browser.close();
-    console.error('Error analyzing page:', err);
+    console.error(e);
     res.status(500).json({ error: 'Failed to analyze the page' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
