@@ -26,10 +26,9 @@ app.post('/hello', async (req, res) => {
 
     const page = await context.newPage();
 
-    // Stealth: Remove navigator.webdriver
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', {
-        get: () => false
+        get: () => false;
       });
     });
 
@@ -81,34 +80,32 @@ app.post('/hello', async (req, res) => {
       }
     });
 
-    // STEP 1: Load main URL
+    // Load main URL
     await page.goto(inputUrl, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(5000);
 
-    // Fallback Clarity/Facebook Pixel detection via script tag
-    if (!clarityId || !fbPixelId) {
-      const fallback = await page.evaluate(() => {
-        const result = { clarity: null, fbPixel: null };
-        const scripts = Array.from(document.querySelectorAll('script'));
+    // Fallback check for clarity ID and fbPixel ID in script tags
+    const fallback = await page.evaluate(() => {
+      const result = { clarity: null, fbPixel: null };
+      const scripts = Array.from(document.querySelectorAll('script'));
 
-        for (const script of scripts) {
-          if (!result.clarity && script.src?.includes('clarity.ms/tag/')) {
-            const match = script.src.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
-            if (match) result.clarity = match[1];
-          }
-
-          if (!result.fbPixel && script.innerText.includes("fbq('init'")) {
-            const match = script.innerText.match(/fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/);
-            if (match) result.fbPixel = match[1];
-          }
+      for (const script of scripts) {
+        if (!result.clarity && script.src?.includes('clarity.ms/tag/')) {
+          const match = script.src.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
+          if (match) result.clarity = match[1];
         }
 
-        return result;
-      });
+        if (!result.fbPixel && script.innerText.includes("fbq('init'")) {
+          const match = script.innerText.match(/fbq\(['"]init['"],\s*['"](\d{5,})['"]\)/);
+          if (match) result.fbPixel = match[1];
+        }
+      }
 
-      if (!clarityId) clarityId = fallback.clarity;
-      if (!fbPixelId) fbPixelId = fallback.fbPixel;
-    }
+      return result;
+    });
+
+    if (!clarityId) clarityId = fallback.clarity;
+    if (!fbPixelId) fbPixelId = fallback.fbPixel;
 
     // Footer links
     const footerLinks = await page.evaluate(() => {
@@ -133,7 +130,7 @@ app.post('/hello', async (req, res) => {
       return a ? a.href : null;
     });
 
-    // STEP 2: Load test version of URL
+    // Load &test version to get portfolio ID and sourctag
     let portfolioId = null;
     let sourctag = null;
     const testUrl = inputUrl.includes('?') ? inputUrl + '&test' : inputUrl + '?test';
@@ -161,12 +158,12 @@ app.post('/hello', async (req, res) => {
     await browser.close();
 
     res.json({
-      clarityId: clarityId || null,
-      fbPixelId: fbPixelId || null,
-      trfLink: trfLink || null,
-      footerLinks: footerLinks || [],
-      portfolioId: portfolioId || null,
-      sourctag: sourctag || null
+      clarityId: clarityId || 'Not Found',
+      fbPixelId: fbPixelId || 'Not Found',
+      trfLink: trfLink || 'Not Found',
+      footerLinks: footerLinks.length > 0 ? footerLinks : ['Not Found'],
+      portfolioId: portfolioId || 'Not Found',
+      sourctag: sourctag || 'Not Found'
     });
 
   } catch (err) {
@@ -177,5 +174,5 @@ app.post('/hello', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
