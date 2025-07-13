@@ -79,7 +79,7 @@ app.post('/hello', async (req, res) => {
     });
 
     // — STEP 1: main page —
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 90000 });
     await page.waitForTimeout(5000);
 
     // fallback via <script> tags
@@ -126,7 +126,7 @@ app.post('/hello', async (req, res) => {
     let portfolioId = null;
     let sourctag = null;
 
-    await page.goto(testUrl, { waitUntil: 'networkidle', timeout: 60000 });
+    await page.goto(testUrl, { waitUntil: 'networkidle', timeout: 90000 });
     await page.waitForTimeout(5000);
 
     ({ portfolioId, sourctag } = await page.evaluate(() => {
