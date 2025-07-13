@@ -79,7 +79,7 @@ app.post('/hello', async (req, res) => {
     });
 
     // — STEP 1: main page —
-    await page.goto(inputUrl, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForTimeout(5000);
 
     // fallback via <script> tags
