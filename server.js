@@ -48,18 +48,18 @@ app.post('/hello', async (req, res) => {
     }
 
     page.on('requestfinished', async request => {
-      const url = request.url();
+      const reqUrl = request.url();
 
       // Clarity from network
       if (!clarityId) {
-        const m = url.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
+        const m = reqUrl.match(/clarity\.ms\/tag\/([a-z0-9]+)/i);
         if (m) clarityId = m[1];
       }
 
       // FB pixel from network
-      if (!fbPixelId && url.includes('facebook.com/tr')) {
+      if (!fbPixelId && reqUrl.includes('facebook.com/tr')) {
         try {
-          const u = new URL(url);
+          const u = new URL(reqUrl);
           const id = u.searchParams.get('id');
           if (id) fbPixelId = id;
         } catch {}
@@ -78,11 +78,11 @@ app.post('/hello', async (req, res) => {
       }
     });
 
-    // — STEP 1: main page —
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 90000 });
+    // — STEP 1: Main page —
+    await page.goto(inputUrl, { waitUntil: 'networkidle', timeout: 90000 });
     await page.waitForTimeout(5000);
 
-    // fallback via <script> tags
+    // Fallback via <script> tags
     const fallback = await page.evaluate(() => {
       const out = { clarity: null, fbPixel: null };
       for (const s of document.querySelectorAll('script')) {
@@ -100,7 +100,7 @@ app.post('/hello', async (req, res) => {
     if (!clarityId) clarityId = fallback.clarity;
     if (!fbPixelId) fbPixelId = fallback.fbPixel;
 
-    // collect footer links
+    // Footer links
     const footerLinks = await page.evaluate(() => {
       const set = new Set();
       function collect(ct) {
@@ -115,13 +115,13 @@ app.post('/hello', async (req, res) => {
       return Array.from(set).map(j => JSON.parse(j));
     });
 
-    // first TRF link
+    // First TRF link
     const trfLink = await page.evaluate(() => {
       const a = document.querySelector('a[href*="trf"]');
       return a ? a.href : null;
     });
 
-    // — STEP 2: test page for portfolio & sourctag —
+    // — STEP 2: test URL for portfolioId and sourctag —
     const testUrl = inputUrl.includes('?') ? `${inputUrl}&test` : `${inputUrl}?test`;
     let portfolioId = null;
     let sourctag = null;
